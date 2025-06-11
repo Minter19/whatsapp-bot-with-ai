@@ -1,0 +1,26 @@
+{
+  "name": "whatsapp-gemini-bot",
+  "version": "1.0.0",
+  "description": "whatsapp bot x gemini by mprx",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "whatsappjs",
+    "bot",
+    "gemini",
+    "ai"
+  ],
+  "author": "mprx",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "body-parser": "^2.2.0",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "pedroslopez/whatsapp-web.js.git"
+  }
+}

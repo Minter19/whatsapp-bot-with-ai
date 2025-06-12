@@ -1,7 +1,7 @@
 // server.js
 require('dotenv').config();
 
-const { client, sendTextMessage, sendMediaFromUrl } = require('./src/auth/whatsappClient');
+const { client, sendTextMessage, sendMediaFromUrl, handleWebhook } = require('./src/auth/whatsappClient');
 const { processFeatures } = require('./src/features');
 const { MSG_UNKNOWN_COMMAND } = require('./src/messages/constants');
 const { startApiServer } = require('./src/api/apiServer');
@@ -16,13 +16,13 @@ client.on('qr', (qr) => {
 
 // Event saat WhatsApp client siap, baru mulai API server
 client.on('ready', () => {
-    console.log('WhatsApp Client is ready! Waiting 5 seconds before starting API...');
+    console.log('WhatsApp Client is ready! Waiting 3 seconds before starting API...');
     setTimeout(() => {
         console.log('Starting API Server...');
         // Teruskan client dan fungsi pengiriman pesan ke API server
-        startApiServer({ client, sendTextMessage, sendMediaFromUrl });
+        startApiServer({ client, sendTextMessage, sendMediaFromUrl, handleWebhook });
         console.log('API Server should be started now.');
-    }, 3000); // Tunggu 5 detik
+    }, 3000); // Tunggu 3 detik
 });
 
 // Tambahkan logging untuk status koneksi lebih lanjut

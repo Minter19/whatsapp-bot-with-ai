@@ -3,9 +3,10 @@ const qrcode = require('qrcode-terminal');
 
 // Buat instance client WhatsApp
 const client = new Client({
-    authStrategy: new LocalAuth({ clientId: "whatsapp-bot-gemini" }), // Menyimpan sesi login secara lokal
+    authStrategy: new LocalAuth({ clientId: "whatsapp-bot-gemini", dataPath: './session' }), // Menyimpan sesi login secara lokal
     puppeteer: {
         headless: true, // Menjalankan browser di background
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null, // Path ke executable Chrome jika diperlukan
         args: ['--no-sandbox', '--disable-setuid-sandbox'], // Penting untuk deployment di beberapa lingkungan
     }
 });
@@ -81,9 +82,32 @@ async function sendMediaFromUrl(number, imageUrl, caption = '') {
     }
 }
 
+// Fungsi untuk melakukan handle pada webhook pesan masuk
+async function handleWebhook(list_number, message) {
+    try {
+        // Validasi nomor
+        if (!list_number || !Array.isArray(list_number) || list_number.length === 0) {
+            throw new Error('List number is required and must be a non-empty array.');
+        }
+
+        // Kirim pesan ke setiap nomor dalam list_number
+        const results = [];
+        for (const number of list_number) {
+            const result = await sendTextMessage(number, message);
+            results.push({ number, ...result });
+        }
+        return { success: true, results };
+    } catch (error) {
+        console.error('Error in handleWebhook:', error);
+        return { success: false, message: error.message };
+    }
+    
+}
+
 // Ekspor client dan fungsi pengiriman pesan
 module.exports = {
     client,
     sendTextMessage,
     sendMediaFromUrl,
+    handleWebhook
 };

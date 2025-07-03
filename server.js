@@ -1,63 +1,74 @@
 // server.js
-require('dotenv').config();
 
-const { client, sendTextMessage, sendMediaFromUrl, handleWebhook } = require('./src/auth/whatsappClient');
+// 1. Impor semua modul yang dibutuhkan
+require('dotenv').config();
+const express = require('express');
+const { createServer } = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
+
+// DIUBAH: Impor 'initialize' dari whatsappClientModule
+const whatsappClientModule = require('./src/auth/whatsappClient');
+const { createRouter } = require('./src/api/routes');
 const { processFeatures } = require('./src/features');
 const { MSG_UNKNOWN_COMMAND } = require('./src/messages/constants');
-const { startApiServer } = require('./src/api/apiServer');
 
-// Inisialisasi WhatsApp Client
-client.initialize();
+// 2. Inisialisasi Server Express, HTTP, dan Socket.IO
+const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+    cors: { origin: "*" }
+});
+const PORT = process.env.PORT || 3000;
 
-// Event saat QR code dihasilkan
-client.on('qr', (qr) => {
-    console.log('QR RECEIVED', qr);
+// Blok io.on('connection') (TETAP ADA DAN PENTING)
+io.on('connection', (socket) => {
+    console.log('🔌 A new client connected:', socket.id);
+
+    // Periksa status bot saat ini dari whatsappClientModule
+    const currentStatus = whatsappClientModule.getBotStatus();
+    const qrDataURL = whatsappClientModule.getQrCode();
+
+    console.log(`INFO: New client check. Current Bot Status: ${currentStatus}`);
+
+    // Logika baru yang lebih andal:
+    // 1. Jika bot sudah ready, langsung kirim sinyal ready.
+    // 2. Jika tidak, baru periksa apakah ada QR code untuk dikirim.
+    if (currentStatus === 'Ready') {
+        console.log('INFO: Bot is already ready. Sending ready status to new client.');
+        socket.emit('client_ready');
+    } else if (qrDataURL) {
+        console.log('INFO: Sending existing QR code to new client.');
+        socket.emit('qr_code', qrDataURL);
+    }
+    // Jika tidak keduanya, UI akan tetap di status "Menunggu QR..." yang sudah benar.
 });
 
-// Event saat WhatsApp client siap, baru mulai API server
-client.on('ready', () => {
-    console.log('WhatsApp Client is ready! Waiting 3 seconds before starting API...');
-    setTimeout(() => {
-        console.log('Starting API Server...');
-        // Teruskan client dan fungsi pengiriman pesan ke API server
-        startApiServer({ client, sendTextMessage, sendMediaFromUrl, handleWebhook });
-        console.log('API Server should be started now.');
-    }, 3000); // Tunggu 3 detik
-});
+// 3. Pasang Middleware & Router API
+app.use(express.json());
+const apiRouter = createRouter(whatsappClientModule);
+app.use('/api', apiRouter);
 
-// Tambahkan logging untuk status koneksi lebih lanjut
-client.on('authenticated', (session) => {
-    console.log('WhatsApp AUTHENTICATED successfully!');
-});
+// 4. Konfigurasi untuk melayani file UI statis
+app.use(express.static(path.join(__dirname, 'public')));
 
-client.on('disconnected', (reason) => {
-    console.error('WhatsApp Client DISCONNECTED:', reason);
-    // Jika terputus, pastikan client di-reset atau ditandai sebagai tidak siap
-});
-
-client.on('auth_failure', (msg) => {
-    console.error('WhatsApp AUTH FAILURE:', msg);
-});
-
-client.on('change_state', (state) => {
-    console.log('WhatsApp Client State Changed:', state);
-    // States: CONNECTING, CONNECTED, DISCONNECTED, TIMEOUT, UNPAIRED, UNPAIRED_IDLE
-});
-
+// 5. Hubungkan Event WhatsApp (HANYA UNTUK 'message')
+// DIHAPUS: Semua listener client.on('qr'), client.on('ready'), client.on('disconnected')
+// sekarang ditangani di dalam whatsappClient.js
+const { client } = whatsappClientModule;
 client.on('message', async msg => {
-    console.log(`Pesan masuk dari ${msg.from}: ${msg.body}`);
+    console.log(`Pesan masuk dari ${msg.from}: ${msg.from}`);
     const handled = await processFeatures(msg);
-    if (!handled) {
-        if (!msg.fromMe && !msg.body.startsWith('!')) {
-            msg.reply(MSG_UNKNOWN_COMMAND);
-        }
+    if (!handled && !msg.fromMe && !msg.body.startsWith('!')) {
+        msg.reply(MSG_UNKNOWN_COMMAND);
     }
 });
 
-client.on('message_create', (msg) => {
-    if (msg.fromMe) {
-        console.log(`Pesan terkirim dari bot: ${msg.body}`);
-    }
-});
+// 6. Mulai Inisialisasi Client dan Jalankan Server
+console.log('Menginisialisasi WhatsApp bot...');
+// DIUBAH: Panggil fungsi initialize dan berikan 'io'
+whatsappClientModule.initialize(io);
 
-console.log('WhatsApp bot starting...');
+httpServer.listen(PORT, () => {
+    console.log(`🚀 Server berjalan di http://localhost:${PORT}`);
+});

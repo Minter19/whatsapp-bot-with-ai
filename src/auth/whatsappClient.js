@@ -1,53 +1,88 @@
+// src/auth/whatsappClient.js
+
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const qrcodeTerminal = require('qrcode-terminal');
+const qrcode = require('qrcode');
+const path = require('path');
+const fs = require('fs');
 
-// Buat instance client WhatsApp
+let currentQrCode = null;
+let botStatus = 'Initializing';
+
 const client = new Client({
-    authStrategy: new LocalAuth({ clientId: "whatsapp-bot-gemini", dataPath: './session' }), // Menyimpan sesi login secara lokal
+    authStrategy: new LocalAuth({ clientId: "whatsapp-bot-gemini", dataPath: './sessions' }),
     puppeteer: {
-        headless: true, // Menjalankan browser di background
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null, // Path ke executable Chrome jika diperlukan
-        args: ['--no-sandbox', '--disable-setuid-sandbox'], // Penting untuk deployment di beberapa lingkungan
+        headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
     }
 });
 
-// Event saat QR code dihasilkan
-client.on('qr', (qr) => {
-    console.log('QR RECEIVED', qr);
-    qrcode.generate(qr, { small: true }); // Tampilkan QR code di terminal
-});
+// DIUBAH: Buat fungsi initialize untuk menerima 'io'
+const initialize = (io) => {
+    client.on('qr', async (qr) => {
+        console.log('QR RECEIVED, generating for UI...');
+        
+        try {
+            const qrDataURL = await qrcode.toDataURL(qr);
+            currentQrCode = qrDataURL;
+            botStatus = 'Waiting for Scan';
+            console.log('INFO: QR code Data URL berhasil dibuat.');
 
-// Event saat client siap
-client.on('ready', () => {
-    console.log('WhatsApp Client is ready!');
-});
+            // BARU: Langsung emit dari sini setelah QR benar-benar siap
+            io.emit('qr_code', currentQrCode);
 
-// Event saat client disconnected (misalnya, ponsel offline)
-client.on('disconnected', (reason) => {
-    console.log('Client was disconnected', reason);
-});
+        } catch (err) {
+            console.error('ERROR: Gagal membuat QR Data URL.', err);
+            currentQrCode = null;
+            botStatus = 'QR Gen Failed';
+        }
+    });
 
-// Event error
-client.on('auth_failure', msg => {
-    console.error('AUTHENTICATION FAILURE', msg);
-});
+    client.on('ready', () => {
+        console.log('WhatsApp Client is ready!');
+        currentQrCode = null;
+        botStatus = 'Ready';
+        io.emit('client_ready'); // Kirim status ready ke semua client
+    });
 
-client.on('message_create', (msg) => {
-    // Ini akan menangkap setiap pesan yang dibuat (dikirim dan diterima)
-    // Kita akan memproses pesan yang diterima di handler terpisah.
-    if (msg.fromMe) {
-        // console.log('Pesan saya:', msg.body);
-    } else {
-        // console.log('Pesan masuk:', msg.body);
+    client.on('disconnected', (reason) => {
+        console.log('Client was disconnected', reason);
+        currentQrCode = null;
+        botStatus = 'Disconnected';
+        io.emit('client_disconnected'); // Kirim status dc ke semua client
+    });
+
+    // Mulai inisialisasi client dari dalam fungsi ini
+    client.initialize();
+};
+
+const logoutClient = async () => {
+    try {
+        console.log('Attempting to logout...');
+        // 1. Hancurkan sesi client yang sedang berjalan
+        await client.destroy();
+        console.log('Client session destroyed.');
+
+        // 2. Hapus folder sesi untuk memastikan logout bersih
+        const sessionPath = path.join(__dirname, '..', '..', 'sessions');
+        console.log("path: ", sessionPath);
+        if (fs.existsSync(sessionPath)) {
+            fs.rmSync(sessionPath, { recursive: true, force: true });
+            console.log('Session folder deleted.');
+        }
+
+        // Reset status internal
+        currentQrCode = null;
+        botStatus = 'DISCONNECTED';
+        
+        return { success: true, message: 'Logout berhasil.' };
+    } catch (error) {
+        console.error('Error during logout:', error);
+        return { success: false, message: 'Terjadi error saat logout.', error: error.message };
     }
-});
+};
 
-
-/**
- * Fungsi untuk mengirim pesan teks
- * @param {string} number Nomor tujuan (misal: '6281234567890')
- * @param {string} message Teks pesan
- */
 async function sendTextMessage(number, message) {
     try {
         const chatId = number.includes('@c.us') ? number : `${number}@c.us`;
@@ -60,12 +95,6 @@ async function sendTextMessage(number, message) {
     }
 }
 
-/**
- * Fungsi untuk mengirim gambar dari URL
- * @param {string} number Nomor tujuan (misal: '6281234567890')
- * @param {string} imageUrl URL gambar
- * @param {string} caption Teks keterangan gambar (opsional)
- */
 async function sendMediaFromUrl(number, imageUrl, caption = '') {
     try {
         const chatId = number.includes('@c.us') ? number : `${number}@c.us`;
@@ -82,15 +111,11 @@ async function sendMediaFromUrl(number, imageUrl, caption = '') {
     }
 }
 
-// Fungsi untuk melakukan handle pada webhook pesan masuk
 async function handleWebhook(list_number, message) {
     try {
-        // Validasi nomor
         if (!list_number || !Array.isArray(list_number) || list_number.length === 0) {
             throw new Error('List number is required and must be a non-empty array.');
         }
-
-        // Kirim pesan ke setiap nomor dalam list_number
         const results = [];
         for (const number of list_number) {
             const result = await sendTextMessage(number, message);
@@ -101,13 +126,25 @@ async function handleWebhook(list_number, message) {
         console.error('Error in handleWebhook:', error);
         return { success: false, message: error.message };
     }
-    
 }
 
-// Ekspor client dan fungsi pengiriman pesan
+function getQrCode() {
+    return currentQrCode;
+}
+
+function getBotStatus() {
+    return botStatus;
+}
+
+
+// Ekspor client dan semua fungsi yang dibutuhkan oleh modul lain
 module.exports = {
+    initialize,
     client,
+    logoutClient,
     sendTextMessage,
     sendMediaFromUrl,
-    handleWebhook
+    handleWebhook,
+    getQrCode,
+    getBotStatus
 };

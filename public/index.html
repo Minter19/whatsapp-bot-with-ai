@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Connector</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main class="container">
+        <div class="card">
+            <div class="card-header">
+                <h2>WhatsApp Connector</h2>
+                <p id="status-text">Menghubungkan ke server...</p>
+            </div>
+            <div class="card-body">
+                <div id="loader-container">
+                    <div class="loader"></div>
+                </div>
+
+                <div id="qrcode-container" class="hidden">
+                    <img id="qrcode-img" src="" alt="Scan QR Code">
+                    <p>Pindai (scan) QR Code di atas menggunakan aplikasi WhatsApp Anda.</p>
+                </div>
+
+                <div id="status-container" class="hidden">
+                    <div id="status-icon"></div>
+                    <p id="status-message"></p>
+                    <button id="logout-button" class="logout-btn">Logout & Reset Sesi</button>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="/script.js"></script>
+</body>
+</html>

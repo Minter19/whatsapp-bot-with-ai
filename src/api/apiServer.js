@@ -1,41 +1,23 @@
-// src/api/apiServer.js
-const express = require('express');
-const bodyParser = require('body-parser');
+const express = require('express'); // Pastikan ini tetap ada jika createRouter menggunakannya
 const { createRouter } = require('./routes'); // Import fungsi createRouter
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.use(bodyParser.json());
-
-// Variabel untuk menyimpan router yang sudah dikonfigurasi
-let configuredApiRouter = null;
-
-// Middleware untuk API
-// Ini akan dipanggil untuk setiap request ke /api
-app.use('/api', (req, res, next) => {
-    // Jika router API belum dikonfigurasi (misal: WhatsApp client belum ready)
-    if (!configuredApiRouter) {
-        console.warn('API: Request ke /api diterima saat router belum terinisialisasi.');
-        return res.status(503).json({ success: false, message: 'Server API belum sepenuhnya siap. Mohon tunggu WhatsApp client ready.' });
-    }
-    // Jika router sudah dikonfigurasi, serahkan request ke router tersebut
-    configuredApiRouter(req, res, next);
-});
-
 /**
- * Memulai server API.
+ * Mengatur rute-rute API ke instance Express yang diberikan.
+ * Fungsi ini sekarang hanya bertanggung jawab untuk membuat router API
+ * dan mengembalikannya, tanpa memasangnya ke instance app atau menangani listen.
+ *
  * @param {object} whatsappClientModule Objek yang berisi client WhatsApp dan fungsi pengirimannya.
+ * @returns {express.Router} Instance router Express yang sudah dikonfigurasi.
  */
-function startApiServer(whatsappClientModule) {
-    // Buat router dengan clientModule yang sudah valid
-    configuredApiRouter = createRouter(whatsappClientModule); // Inisialisasi router di sini
+function setupApiRoutes(whatsappClientModule) {
+    // Buat instance router menggunakan createRouter dari routes.js
+    // Ini akan mengkonfigurasi semua rute API yang diperlukan
+    const router = createRouter(whatsappClientModule); // <--- LANGSUNG BUAT DAN SIMPAN KE 'router'
 
-    app.listen(PORT, () => {
-        console.log(`🚀 REST API server berjalan di http://localhost:${PORT}`);
-        console.log(`Endpoint untuk mengirim pesan: POST http://localhost:${PORT}/api/send-message`);
-        console.log(`Endpoint status bot: GET http://localhost:${PORT}/api/status`);
-    });
+    // HAPUS BAGIAN app.listen() DI SINI
+
+    return router; // <--- KEMBALIKAN INSTANCE ROUTER LANGSUNG
 }
 
-module.exports = { startApiServer };
+// Ubah export function dari startApiServer menjadi setupApiRoutes
+module.exports = { setupApiRoutes };
